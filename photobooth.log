@@ -1,0 +1,99 @@
+2026-10-20 15:20:05,229 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 720, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 97, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-20 15:20:14,221 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 720, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 97, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-20 15:24:48,429 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 720, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 97, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-20 15:24:52,254 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 720, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 97, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-20 23:05:55,950 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 734, in _run_session
+    result = engine.process()
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 349, in process
+    gif_path = self._save_gif(pil_photos, overlay=overlay)
+               ^^^^^^^^^^^^^^
+AttributeError: 'PhotoBoothEngine' object has no attribute '_save_gif'
+2026-10-21 19:48:39,288 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 726, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 95, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-21 19:48:53,506 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 726, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 95, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-21 19:51:06,098 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\app.py", line 726, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\camera_engine.py", line 95, in __init__
+    self.meme_manager = MemeManager()
+                        ~~~~~~~~~~~^^
+  File "C:\Users\ADVAN\Downloads\photobooth (1)\photobooth\meme_manager.py", line 58, in __init__
+    self.face_cascade = cv2.CascadeClassifier(
+                        ^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'cv2' has no attribute 'CascadeClassifier'

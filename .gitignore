@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+# rahasia Google
+credentials.json
+token.json
+token.pickle
+drive_folder.json
+# data tamu & log
+riwayat/
+hasil_fotobooth/
+photobooth.log
+qr_share_*.png
+qr_code.png

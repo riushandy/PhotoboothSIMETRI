@@ -10,12 +10,15 @@ import zipfile
 import math
 
 
+from drive_manager import get_drive_manager
+
+
 class UploadManager:
     UPLOAD_URL = "https://tmpfiles.org/api/v1/upload"
     MAX_RETRIES = 2
 
     def __init__(self):
-        pass
+        self.storage_note = "Link aktif ±1 jam via tmpfiles.org"
 
     # ─────────────────────────────────────────────────────────────
     # UPLOAD
@@ -25,6 +28,18 @@ class UploadManager:
         """Upload ke tmpfiles.org dengan fallback ke catbox.moe jika DNS/koneksi gagal."""
         filename = os.path.basename(filepath)
         file_size = os.path.getsize(filepath)
+
+        # Utama: Google Drive. Jika belum di-setup/gagal, lanjut ke layanan cadangan.
+        drive = get_drive_manager()
+        if drive.is_ready():
+            print(f"[Upload] {filename} ({file_size // 1024} KB) ke Google Drive...")
+            link = drive.upload_file(filepath)
+            if link:
+                self.storage_note = "Tersimpan di Google Drive"
+                print(f"Upload Berhasil (Drive)! Link: {link}")
+                return link
+            print("Upload Drive gagal, mencoba layanan cadangan...")
+        self.storage_note = "Link aktif ±1 jam via tmpfiles.org"
 
         # Opsi 1: Coba upload ke tmpfiles.org
         for attempt in range(1, self.MAX_RETRIES + 1):
@@ -115,13 +130,13 @@ class UploadManager:
         ).pack(pady=4)
 
         tk.Label(
-            root, text="Scan QR, lalu tekan Download di halaman yang terbuka.",
+            root, text="Scan QR, lalu simpan/unduh dari halaman yang terbuka.",
             font=("Segoe UI", 10), bg="#0f3460", fg="#a8a8b3",
         ).pack(padx=16)
 
         tk.Label(
             root,
-            text="Link aktif ±1 jam via tmpfiles.org",
+            text=self.storage_note,
             font=("Segoe UI", 10),
             bg="#0f3460",
             fg="#a8a8b3",

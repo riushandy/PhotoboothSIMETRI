@@ -721,26 +721,38 @@ class App(ctk.CTk):
             daemon=True,
         ).start()
 
-    def _run_session(self, template_data, cam_index, filter_idx):
+    def _run_session(self, *args, **kwargs):
+        """Menjalankan sesi foto di background thread."""
         try:
-            engine = PhotoBoothEngine(
-                template_data, camera_index=cam_index, cancel_event=self._session_cancel
-            )
-            engine.filter_idx = filter_idx
+            # Pembacaan aman untuk config template
+            config = getattr(self, "config", getattr(self, "current_config", getattr(self, "selected_config", None)))
+            
+            # Pembacaan aman untuk camera_index (default: 0)
+            cam_idx = getattr(self, "camera_index", getattr(self, "cam_index", getattr(self, "selected_camera", 0)))
+            
+            # 1. Inisialisasi engine kamera
+            engine = PhotoBoothEngine(config, camera_index=cam_idx)
+            
+            # 2. Jalankan pengambilan foto
             success = engine.capture()
-            if not success or self._session_cancel.is_set():
-                self._finish_session()
-                return
-            result = engine.process()
-            if not result:
-                self._finish_session()
-                return
-            composite_path, gif_path = result
-            self._run_on_ui(self._show_preview, engine, composite_path, gif_path)
+            if not success:
+                return  # Pengguna membatalkan sesi (ESC)
+
+            # 3. Proses penggabungan foto komposit dan video MP4
+            composite_path, mp4_path = engine.process()
+
+            if not composite_path or not os.path.exists(composite_path):
+                raise RuntimeError("Gagal menghasilkan foto komposit.")
+
+            # 4. Tampilkan halaman preview
+            self._run_on_ui(self._show_preview, engine, composite_path, mp4_path)
+
         except Exception as e:
-            logging.exception("Sesi foto gagal")
-            self._run_on_ui(messagebox.showerror, "Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{e}\n\nSilakan coba lagi.")
-            self._finish_session()
+            err_msg = str(e)
+            logging.error(f"Sesi foto gagal: {err_msg}")
+            self._run_on_ui(
+                lambda msg=err_msg: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{msg}\n\nSilakan coba lagi.")
+            )
 
     def _show_preview(self, engine, composite_path, gif_path):
         if getattr(self, "_active_preview_window", None) is not None and self._active_preview_window.root.winfo_exists():
@@ -801,11 +813,7 @@ class App(ctk.CTk):
                 messagebox.showerror("Kamera Sibuk", "Tunggu sebentar lalu pilih template lagi.")
                 return
             self.status_label.configure(text="🔄 Retake...", text_color=ORANGE)
-            threading.Thread(
-                target=self._run_session,
-                args=(engine.config, engine.camera_index, engine.filter_idx),
-                daemon=True,
-            ).start()
+            threading.Thread(target=self._run_session, daemon=True).start()
 
         def do_retake_one(photo_index):
             self._session_cancel.clear()

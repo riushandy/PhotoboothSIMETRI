@@ -97,3 +97,126 @@ Traceback (most recent call last):
     self.face_cascade = cv2.CascadeClassifier(
                         ^^^^^^^^^^^^^^^^^^^^^
 AttributeError: module 'cv2' has no attribute 'CascadeClassifier'
+2026-10-21 21:18:06,791 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 734, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 324, in process
+    with Image.open(overlay_path) as source:
+         ~~~~~~~~~~^^^^^^^^^^^^^^
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 3704, in open
+    im = _open_core(fp, filename, prefix, formats)
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 3693, in _open_core
+    _decompression_bomb_check(im.size)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 3590, in _decompression_bomb_check
+    raise DecompressionBombError(msg)
+PIL.Image.DecompressionBombError: Image size (224363712 pixels) exceeds limit of 178956970 pixels, could be decompression bomb DOS attack.
+2026-10-21 21:26:34,303 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 734, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 330, in process
+    overlay = overlay.resize((canvas_w, canvas_h), Image.LANCZOS)
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 2417, in resize
+    im = im.resize(size, resample, box, reducing_gap)
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 2440, in resize
+    return self._new(self.im.resize(size, resample, box))
+                     ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+MemoryError
+2026-10-21 21:38:46,357 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 734, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 300, in process
+    gif_path = self._save_gif(pil_photos, overlay=overlay)
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 331, in _save_gif
+    gif_path = os.path.join(self.session_dir, "animasi_live.gif")
+                            ^^^^^^^^^^^^^^^^
+AttributeError: 'PhotoBoothEngine' object has no attribute 'session_dir'
+2026-10-21 21:43:52,235 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 726, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 92, in __init__
+    self.session_dir = os.path.join(BASE_OUTPUT_DIR, f"Sesi_{timestamp}_{unique_id}")
+                                    ^^^^^^^^^^^^^^^
+NameError: name 'BASE_OUTPUT_DIR' is not defined
+2026-10-21 21:43:57,138 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 726, in _run_session
+    engine = PhotoBoothEngine(
+        template_data, camera_index=cam_index, cancel_event=self._session_cancel
+    )
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 92, in __init__
+    self.session_dir = os.path.join(BASE_OUTPUT_DIR, f"Sesi_{timestamp}_{unique_id}")
+                                    ^^^^^^^^^^^^^^^
+NameError: name 'BASE_OUTPUT_DIR' is not defined
+2026-10-21 21:59:09,484 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 843, in _show_preview
+    preview.show(wait=False)
+    ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\preview_window.py", line 102, in show
+    self._load_previews()
+    ~~~~~~~~~~~~~~~~~~~^^
+  File "C:\github riu\PhotoboothSIMETRI\preview_window.py", line 238, in _load_previews
+    with Image.open(self.gif_path) as gif:
+         ~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 3730, in open
+    raise UnidentifiedImageError(msg)
+PIL.UnidentifiedImageError: cannot identify image file 'C:\\github riu\\PhotoboothSIMETRI\\riwayat\\Sesi_20261021_215808_851644\\animasi_live.mp4'
+2026-10-21 22:07:02,872 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 736, in _run_session
+    if not result:
+           ^^^^^^
+NameError: name 'result' is not defined
+2026-10-21 22:09:16,180 ERROR Sesi foto gagal: name 'engine' is not defined
+2026-10-21 22:12:59,900 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'selected_config'
+2026-10-21 22:12:59,949 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 747, in <lambda>
+    lambda: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{e}\n\nSilakan coba lagi.")
+                                                                                       ^
+NameError: cannot access free variable 'e' where it is not associated with a value in enclosing scope
+2026-10-21 22:13:09,007 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'selected_config'
+2026-10-21 22:13:09,067 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 747, in <lambda>
+    lambda: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{e}\n\nSilakan coba lagi.")
+                                                                                       ^
+NameError: cannot access free variable 'e' where it is not associated with a value in enclosing scope
+2026-10-21 22:14:04,838 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'selected_config'
+2026-10-21 22:14:04,997 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 747, in <lambda>
+    lambda: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{e}\n\nSilakan coba lagi.")
+                                                                                       ^
+NameError: cannot access free variable 'e' where it is not associated with a value in enclosing scope
+2026-10-21 22:14:12,997 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'selected_config'
+2026-10-21 22:14:13,150 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 747, in <lambda>
+    lambda: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{e}\n\nSilakan coba lagi.")
+                                                                                       ^
+NameError: cannot access free variable 'e' where it is not associated with a value in enclosing scope
+2026-10-21 22:16:49,578 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'camera_index'
+2026-10-21 22:19:40,087 ERROR Sesi foto gagal: 'method' object is not subscriptable

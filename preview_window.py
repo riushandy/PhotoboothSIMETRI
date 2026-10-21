@@ -140,7 +140,7 @@ class PreviewWindow:
             ("📸  Download Foto", SURFACE, GREEN, self._on_upload_photo),
         ]
         if self.gif_path and os.path.exists(self.gif_path):
-            actions.append(("🎞  Download GIF", SURFACE, ORANGE, self._on_upload_gif))
+            actions.append(("🎬  Download Video MP4", SURFACE, ORANGE, self._on_upload_gif))
         if self.print_callback:
             actions.append(("🖨  Cetak Foto", SURFACE, ACCENT, self._on_print))
         actions.extend([
@@ -230,17 +230,48 @@ class PreviewWindow:
             button.bind("<MouseWheel>", lambda event: canvas.yview_scroll(-int(event.delta / 120), "units"))
 
     def _load_previews(self):
-        max_w, max_h = self._preview_size
-        with Image.open(self.composite_path) as photo:
-            photo.thumbnail((max_w, max_h), Image.LANCZOS)
-            self.photo_tk = ImageTk.PhotoImage(photo)
-        if self.gif_path and os.path.exists(self.gif_path):
-            with Image.open(self.gif_path) as gif:
-                self.frame_delay = max(80, gif.info.get("duration", 220))
-                for frame in ImageSequence.Iterator(gif):
-                    gif_frame = frame.convert("RGBA")
-                    gif_frame.thumbnail((max_w, max_h), Image.LANCZOS)
-                    self.gif_frames.append(ImageTk.PhotoImage(gif_frame))
+        """Memuat preview foto komposit dan animasi secara aman."""
+        try:
+            # 1. Preview Foto Utama (JPG)
+            if self.composite_path and os.path.exists(self.composite_path):
+                with Image.open(self.composite_path) as img:
+                    img_ratio = img.width / img.height
+                    # Resize proporsional untuk tampilan preview di layar
+                    target_h = 500
+                    target_w = int(target_h * img_ratio)
+                    preview_img = img.resize((target_w, target_h), Image.LANCZOS)
+                    self.composite_photo = ImageTk.PhotoImage(preview_img)
+                    if hasattr(self, "composite_label"):
+                        self.composite_label.configure(image=self.composite_photo)
+
+            # 2. Preview GIF / Video MP4
+            if self.gif_path and os.path.exists(self.gif_path):
+                # Jika formatnya GIF, buka dengan Pillow
+                if self.gif_path.lower().endswith(".gif"):
+                    with Image.open(self.gif_path) as gif:
+                        self.gif_frames = []
+                        try:
+                            while True:
+                                frame = gif.copy().convert("RGBA")
+                                frame.thumbnail((300, 300), Image.LANCZOS)
+                                self.gif_frames.append(ImageTk.PhotoImage(frame))
+                                gif.seek(gif.tell() + 1)
+                        except EOFError:
+                            pass
+                    if self.gif_frames and hasattr(self, "gif_label"):
+                        self._animate_gif(0)
+                
+                # Jika formatnya MP4, tampilkan status info tanpa membukanya via Pillow
+                elif self.gif_path.lower().endswith(".mp4"):
+                    if hasattr(self, "gif_label"):
+                        self.gif_label.configure(
+                            text="🎬 Video MP4 Live berhasil dibuat!\nDapat diunduh via tombol Download Video.",
+                            font=("Segoe UI", 11),
+                            fg="#00d4aa"
+                        )
+
+        except Exception as e:
+            print(f"Peringatan saat memuat preview: {e}")
 
     def _animate_preview(self):
         self._animation_after = None

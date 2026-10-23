@@ -134,6 +134,41 @@ class DriveManager:
             logger.exception("Upload ke Google Drive gagal")
             return None
 
+    def upload_folder(self, file_paths, folder_name):
+        """Upload semua file ke satu sub-folder baru, bagikan folder (anyone with link),
+        kembalikan URL folder. Semua-atau-tidak: gagal sebagian -> None."""
+        if not self.is_ready():
+            return None
+        try:
+            with self._lock:
+                service = self._service()
+                parent_id = self._ensure_folder(service)
+                sub = service.files().create(
+                    body={
+                        "name": folder_name,
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "parents": [parent_id],
+                    },
+                    fields="id",
+                ).execute(num_retries=3)
+                sub_id = sub["id"]
+                # Izin di folder diwarisi semua file di dalamnya
+                service.permissions().create(
+                    fileId=sub_id, body={"role": "reader", "type": "anyone"},
+                ).execute(num_retries=3)
+                for path in file_paths:
+                    mime = mimetypes.guess_type(path)[0] or "application/octet-stream"
+                    media = MediaFileUpload(path, mimetype=mime, resumable=True)
+                    service.files().create(
+                        body={"name": os.path.basename(path), "parents": [sub_id]},
+                        media_body=media,
+                        fields="id",
+                    ).execute(num_retries=3)
+            return f"https://drive.google.com/drive/folders/{sub_id}?usp=sharing"
+        except Exception:
+            logger.exception("Upload folder ke Google Drive gagal")
+            return None
+
     @staticmethod
     def share_link(file_id, file_path):
         # ZIP tidak punya preview di Drive -> langsung unduh.

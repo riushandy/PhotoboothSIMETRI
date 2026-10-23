@@ -1,7 +1,8 @@
 import os
 import tkinter as tk
 
-from PIL import Image, ImageTk, ImageSequence
+import cv2
+from PIL import Image, ImageTk
 from idle_timer import IdleTimer
 
 
@@ -47,6 +48,11 @@ class PreviewWindow:
         self.frame_delay = 220
         self.frame_index = 0
         self._animation_after = None
+        self._video_cap = None
+        self._video_after = None
+        self._video_delay = 33
+        self._video_height = 500
+        self.video_label = None
         self._idle_timer = None
         self._closed = False
         self._focus_widgets = []
@@ -80,10 +86,11 @@ class PreviewWindow:
 
         outer = tk.Frame(self.root, bg=BG)
         outer.pack(fill="both", expand=True)
-        content = tk.Frame(outer, bg=BG)
-        content.pack(fill="both", expand=True)
+        # Footer di-pack PERTAMA agar tombol tidak terpotong di layar pendek
         footer = tk.Frame(outer, bg=BG)
         footer.pack(fill="x", side="bottom")
+        content = tk.Frame(outer, bg=BG)
+        content.pack(fill="both", expand=True)
 
         self.root.bind("<Tab>", self._focus_next, add="+")
         self.root.bind("<Shift-Tab>", self._focus_previous, add="+")
@@ -115,14 +122,14 @@ class PreviewWindow:
                  bg=CARD, fg=GREEN).pack(anchor="w", padx=12, pady=(9, 5))
         tk.Label(photo_panel, bg=CARD, image=self.photo_tk).pack(padx=10, pady=(0, 10))
 
-        if self.gif_frames:
-            gif_panel = tk.Frame(preview_frame, bg=CARD, highlightthickness=1, highlightbackground=BORDER)
-            gif_panel.pack(side=panel_side, anchor="n", **panel_pad)
-            tk.Label(gif_panel, text="ANIMATED FRAME", font=("Segoe UI", 10, "bold"),
+        if self._video_cap is not None:
+            video_panel = tk.Frame(preview_frame, bg=CARD, highlightthickness=1, highlightbackground=BORDER)
+            video_panel.pack(side=panel_side, anchor="n", **panel_pad)
+            tk.Label(video_panel, text="VIDEO", font=("Segoe UI", 10, "bold"),
                      bg=CARD, fg=ORANGE).pack(anchor="w", padx=12, pady=(9, 5))
-            self.gif_label = tk.Label(gif_panel, bg=CARD, image=self.gif_frames[0])
-            self.gif_label.pack(padx=10, pady=(0, 10))
-            self._animation_after = self.root.after(self.frame_delay, self._animate_preview)
+            self.video_label = tk.Label(video_panel, bg=CARD)
+            self.video_label.pack(padx=10, pady=(0, 10))
+            self._video_after = self.root.after(self._video_delay, self._play_video)
 
         if self.photo_previews and self.retake_one_callback:
             self._build_retake_panel(preview_frame, panel_side)
@@ -136,22 +143,18 @@ class PreviewWindow:
         }
 
         # Menghitung total tombol aktif untuk menentukan jumlah kolom grid
-        actions = [
-            ("📸  Download Foto", SURFACE, GREEN, self._on_upload_photo),
-        ]
-        if self.gif_path and os.path.exists(self.gif_path):
-            actions.append(("🎬  Download Video MP4", SURFACE, ORANGE, self._on_upload_gif))
+        actions = []
         if self.print_callback:
-            actions.append(("🖨  Cetak Foto", SURFACE, ACCENT, self._on_print))
+            actions.append(("🖨 Cetak Foto", SURFACE, ACCENT, self._on_print))
         actions.extend([
-            ("🔄  Ulang Semua", SURFACE, ORANGE, self._on_retake),
-            ("✓  Selesai", SURFACE, MUTED, self._on_save),
+            ("🔄 Ulang Semua", SURFACE, ORANGE, self._on_retake),
+            ("✓ Selesai", SURFACE, MUTED, self._on_save),
         ])
 
         total_columns = len(actions)
 
-        if self.bundle_callback and self.gif_path and os.path.exists(self.gif_path):
-            bundle = tk.Button(btn_frame, text="📦  Download Foto + GIF (1 QR)",
+        if self.bundle_callback:
+            bundle = tk.Button(btn_frame, text="📲  Download Semua (QR Google Drive)",
                                bg=GREEN, fg=BG, activebackground="#57e0bd", activeforeground=BG,
                                command=self._on_upload_bundle, **btn_style)
             bundle.grid(row=0, column=0, columnspan=total_columns, padx=4, pady=(0, 8), sticky="ew")
@@ -166,7 +169,7 @@ class PreviewWindow:
             button.bind("<Return>", lambda _event, target=button: target.invoke())
             button.bind("<space>", lambda _event, target=button: target.invoke())
 
-        if self.bundle_callback and self.gif_path and os.path.exists(self.gif_path):
+        if self.bundle_callback:
             self._focus_widgets.insert(0, bundle)
             bundle.bind("<Return>", lambda _event: bundle.invoke())
             bundle.bind("<space>", lambda _event: bundle.invoke())
@@ -230,48 +233,45 @@ class PreviewWindow:
             button.bind("<MouseWheel>", lambda event: canvas.yview_scroll(-int(event.delta / 120), "units"))
 
     def _load_previews(self):
-        """Memuat preview foto komposit dan animasi secara aman."""
-        try:
-            # 1. Preview Foto Utama (JPG)
-            if self.composite_path and os.path.exists(self.composite_path):
-                with Image.open(self.composite_path) as img:
-                    img_ratio = img.width / img.height
-                    # Resize proporsional untuk tampilan preview di layar
-                    target_h = 500
-                    target_w = int(target_h * img_ratio)
-                    preview_img = img.resize((target_w, target_h), Image.LANCZOS)
-                    self.composite_photo = ImageTk.PhotoImage(preview_img)
-                    if hasattr(self, "composite_label"):
-                        self.composite_label.configure(image=self.composite_photo)
+        """Memuat preview foto template dan membuka video MP4 untuk diputar."""
+        if self.composite_path and os.path.exists(self.composite_path):
+            with Image.open(self.composite_path) as img:
+                max_w, max_h = self._preview_size
+                scale = min(max_w / img.width, max_h / img.height)
+                target_w = max(1, int(img.width * scale))
+                target_h = max(1, int(img.height * scale))
+                preview_img = img.resize((target_w, target_h), Image.LANCZOS)
+            self.composite_photo = ImageTk.PhotoImage(preview_img, master=self.root)
+            self.photo_tk = self.composite_photo
+            self._video_height = target_h
 
-            # 2. Preview GIF / Video MP4
-            if self.gif_path and os.path.exists(self.gif_path):
-                # Jika formatnya GIF, buka dengan Pillow
-                if self.gif_path.lower().endswith(".gif"):
-                    with Image.open(self.gif_path) as gif:
-                        self.gif_frames = []
-                        try:
-                            while True:
-                                frame = gif.copy().convert("RGBA")
-                                frame.thumbnail((300, 300), Image.LANCZOS)
-                                self.gif_frames.append(ImageTk.PhotoImage(frame))
-                                gif.seek(gif.tell() + 1)
-                        except EOFError:
-                            pass
-                    if self.gif_frames and hasattr(self, "gif_label"):
-                        self._animate_gif(0)
-                
-                # Jika formatnya MP4, tampilkan status info tanpa membukanya via Pillow
-                elif self.gif_path.lower().endswith(".mp4"):
-                    if hasattr(self, "gif_label"):
-                        self.gif_label.configure(
-                            text="🎬 Video MP4 Live berhasil dibuat!\nDapat diunduh via tombol Download Video.",
-                            font=("Segoe UI", 11),
-                            fg="#00d4aa"
-                        )
+        # Video MP4 dibaca frame demi frame (hemat memori), diputar berulang
+        if self.gif_path and os.path.exists(self.gif_path) and self.gif_path.lower().endswith(".mp4"):
+            cap = cv2.VideoCapture(self.gif_path)
+            if cap.isOpened():
+                fps = cap.get(cv2.CAP_PROP_FPS) or 30
+                self._video_delay = max(15, int(1000 / fps))
+                self._video_cap = cap
+            else:
+                cap.release()
 
-        except Exception as e:
-            print(f"Peringatan saat memuat preview: {e}")
+    def _play_video(self):
+        self._video_after = None
+        if self._closed or self._video_cap is None or not self.root.winfo_exists():
+            return
+        ok, frame = self._video_cap.read()
+        if not ok:  # ulang dari awal
+            self._video_cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ok, frame = self._video_cap.read()
+        if ok and self.video_label is not None:
+            h, w = frame.shape[:2]
+            th = self._video_height
+            tw = max(1, int(w * th / h))
+            frame = cv2.resize(frame, (tw, th), interpolation=cv2.INTER_AREA)
+            image = ImageTk.PhotoImage(Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)), master=self.root)
+            self.video_label.configure(image=image)
+            self.video_label.image = image
+        self._video_after = self.root.after(self._video_delay, self._play_video)
 
     def _animate_preview(self):
         self._animation_after = None
@@ -287,6 +287,12 @@ class PreviewWindow:
         if self._animation_after is not None:
             self.root.after_cancel(self._animation_after)
             self._animation_after = None
+        if self._video_after is not None:
+            self.root.after_cancel(self._video_after)
+            self._video_after = None
+        if self._video_cap is not None:
+            self._video_cap.release()
+            self._video_cap = None
 
     def _on_destroy(self, event):
         if event.widget is self.root and not self._closed:

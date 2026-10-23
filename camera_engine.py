@@ -6,6 +6,7 @@ import numpy as np
 import uuid
 import logging
 import copy
+from collections import deque
 from datetime import datetime
 from PIL import Image, ImageFilter
 
@@ -29,6 +30,11 @@ from filter_engine import apply_filter, get_filter_name, FILTER_COUNT
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "riwayat")
 CAMERA_IDLE_SECONDS = 120
 
+# ── Pengaturan countdown & video (ubah di sini) ──────────────────
+COUNTDOWN_SECONDS = 10   # hitung mundur per foto
+VIDEO_SECONDS = 5        # durasi video = N detik TERAKHIR sebelum jepret (harus < COUNTDOWN_SECONDS)
+VIDEO_FPS = 30           # fps video hasil; kamera harus mampu mengirim fps ini (naikkan ke 60 bila kamera kuat)
+
 
 def create_output_path(extension=".jpg"):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -43,7 +49,7 @@ def get_group_guide_box(frame_w, frame_h, margin_ratio=0.035):
     return margin_x, margin_y, frame_w - margin_x, frame_h - margin_y
 
 
-def fit_group_photo(photo, width, height):
+def fit_group_photo(photo, width, height, resample=Image.LANCZOS):
     """Memotong dan memperbesar foto agar mengisi seluruh slot template secara presisi tanpa celah putih."""
     target_ratio = width / height
     image_ratio = photo.width / photo.height
@@ -59,7 +65,7 @@ def fit_group_photo(photo, width, height):
         cropped = photo.crop((0, offset, photo.width, offset + crop_height))
 
     # Pastikan ukuran hasil resize sesuai piksel target tanpa toleransi pembulatan
-    return cropped.resize((width, height), Image.LANCZOS)
+    return cropped.resize((width, height), resample)
 
 
 def list_available_cameras(max_tests=5):
@@ -180,41 +186,47 @@ class PhotoBoothEngine:
 
         captured_photos = []
         captured_boxes = []
+        frame_interval = 1.0 / VIDEO_FPS
 
         # Perekaman per slot foto
         for i in range(photo_count):
-            delay = 3  # Hitung mundur 3 detik
             start_time = time.monotonic()
-            last_record_time = 0
-            photo_video_frames = []
+            last_record_time = 0.0
+            clip = deque()  # (timestamp, jpeg_bytes) -> hanya VIDEO_SECONDS terakhir
 
-            while time.monotonic() - start_time < delay:
+            while time.monotonic() - start_time < COUNTDOWN_SECONDS:
                 if self.cancel_event.is_set():
                     return False
+
                 ret, frame = cap.read()
                 if not ret or frame is None or frame.size == 0:
                     raise RuntimeError("Koneksi kamera terputus.")
+
                 frame = cv2.flip(frame, 1)
                 h, w = frame.shape[:2]
-
                 now = time.monotonic()
-                # Perekaman 60 FPS (~0.0166 detik per frame)
-                if now - last_record_time >= 0.016:
+
+                # Rekam sesuai VIDEO_FPS; disimpan sebagai JPEG supaya hemat memori
+                if now - last_record_time >= frame_interval * 0.9:
                     last_record_time = now
                     clean_frame = apply_filter(frame.copy(), self.filter_idx)
                     crop_area = clean_frame[self._y1:self._y2, self._x1:self._x2]
-                    clean_rgb = cv2.cvtColor(crop_area, cv2.COLOR_BGR2RGB)
-                    photo_video_frames.append(Image.fromarray(clean_rgb))
+                    ok, buf = cv2.imencode(".jpg", crop_area, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                    if ok:
+                        clip.append((now, buf.tobytes()))
+                        cutoff = now - VIDEO_SECONDS
+                        while clip and clip[0][0] < cutoff:
+                            clip.popleft()
 
                 display_frame = apply_filter(frame.copy(), self.filter_idx)
                 cv2.rectangle(display_frame, (self._x1, self._y1), (self._x2, self._y2), (255, 255, 255), 2)
 
                 elapsed = time.monotonic() - start_time
-                remaining_int = int(delay - elapsed) + 1
-
-                cv2.putText(display_frame, str(remaining_int), (w // 2 - 20, h // 2),
+                remaining_int = int(COUNTDOWN_SECONDS - elapsed) + 1
+                cv2.putText(display_frame, str(remaining_int), (w // 2 - 40, h // 2),
                             cv2.FONT_HERSHEY_SIMPLEX, 3.5, (0, 80, 255), 4)
                 cv2.imshow("Photo Booth", display_frame)
+
                 if cv2.waitKey(1) & 0xFF == 27:
                     return False
 
@@ -226,13 +238,11 @@ class PhotoBoothEngine:
                 captured_photos.append(frame)
                 captured_boxes.append((self._x1, self._y1, self._x2, self._y2))
 
-                # Ambil 35-40 frame rekaman video 60 FPS terakhir
-                recorded_clip = photo_video_frames[-40:] if photo_video_frames else []
+                recorded_clip = list(clip)
                 if photo_index is None:
                     self.live_frames.append(recorded_clip)
-                else:
-                    if photo_index < len(self.live_frames):
-                        self.live_frames[photo_index] = recorded_clip
+                elif photo_index < len(self.live_frames):
+                    self.live_frames[photo_index] = recorded_clip
 
                 # Flash
                 flash = np.ones_like(frame) * 255
@@ -271,9 +281,9 @@ class PhotoBoothEngine:
         return photo.crop((max(0, x1), max(0, y1), min(photo.width, x2), min(photo.height, y2)))
 
     def process(self, on_complete=None):
-        """Simpan JPG + GIF otomatis dalam resolusi tinggi sebelum preview."""
+        """Simpan foto template (JPG), semua foto raw, dan video MP4."""
         if not self.photos:
-            return
+            return None
 
         canvas_w = self.config["width"]
         canvas_h = self.config["height"]
@@ -292,26 +302,41 @@ class PhotoBoothEngine:
             if overlay.size != (canvas_w, canvas_h):
                 overlay = overlay.resize((canvas_w, canvas_h), Image.LANCZOS)
 
-        # 1. Simpan Foto Komposit JPG dalam resolusi maksimal (Quality 98, DPI 300)
+        # 1. Foto dengan template (JPG kualitas tinggi)
         final_image = self._compose_photos(pil_photos, overlay)
         final_image.save(
             self.output_filename,
-            format="JPEG",
-            quality=98,        # Menaikkan kualitas kompresi JPG dari 92 ke 98
-            subsampling=0,     # Mencegah kompresi warna (chroma subsampling 4:4:4)
-            dpi=(300, 300)     # Mengatur resolusi cetak ke 300 DPI (standar cetak foto)
+            format="JPEG", quality=98, subsampling=0, dpi=(300, 300),
         )
-        print(f"Foto komposit resolusi tinggi disimpan: {self.output_filename}")
+        print(f"Foto template disimpan: {self.output_filename}")
 
-        # 2. Simpan GIF/Boomerang
-        gif_path = None
-        if pil_photos:
-            # 3. Simpan Video MP4 (Menggantikan GIF)
-            video_path = self._save_mp4(pil_photos, overlay=overlay)
+        # 2. Foto raw (tanpa template) -> foto_raw_1.jpg, foto_raw_2.jpg, ...
+        self._save_raw_photos()
 
-        return self.output_filename, video_path
+        # 3. Video MP4
+        self.video_path = self._save_mp4(pil_photos, overlay=overlay)
+        return self.output_filename, self.video_path
 
-    def _compose_photos(self, photos, overlay=None, max_size=None):
+    def _save_raw_photos(self):
+        self.raw_paths = []
+        for i, frame in enumerate(self.photos):
+            path = os.path.join(self.session_dir, f"foto_raw_{i + 1}.jpg")
+            Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).save(
+                path, format="JPEG", quality=97, subsampling=0
+            )
+            self.raw_paths.append(path)
+        return self.raw_paths
+
+    def session_files(self):
+        """Semua file hasil sesi: foto raw + foto template + video."""
+        files = list(getattr(self, "raw_paths", []))
+        files.append(self.output_filename)
+        video = getattr(self, "video_path", None)
+        if video:
+            files.append(video)
+        return [f for f in files if f and os.path.isfile(f)]
+
+    def _compose_photos(self, photos, overlay=None, max_size=None, fast=False):
         canvas_w, canvas_h = self.config["width"], self.config["height"]
         scale = min(1, max_size[0] / canvas_w, max_size[1] / canvas_h) if max_size else 1.0
         size = (max(1, round(canvas_w * scale)), max(1, round(canvas_h * scale)))
@@ -320,6 +345,7 @@ class PhotoBoothEngine:
         image = Image.new("RGBA", size, (0, 0, 0, 0))
         sx, sy = size[0] / canvas_w, size[1] / canvas_h
 
+        resample = Image.BILINEAR if fast else Image.LANCZOS
         for photo, (x, y, w, h) in zip(photos, self.config["layout"]):
             # Berikan toleransi +1 atau +2 piksel (bleed) agar foto sedikit masuk ke bawah bingkai template
             left = max(0, round(x * sx) - 1)
@@ -327,7 +353,7 @@ class PhotoBoothEngine:
             width = round((w + 2) * sx)
             height = round((h + 2) * sy)
 
-            fitted = fit_group_photo(photo, width, height).convert("RGBA")
+            fitted = fit_group_photo(photo, width, height, resample).convert("RGBA")
             image.paste(fitted, (left, top))
 
         # Tempelkan overlay PNG di atas foto
@@ -337,53 +363,72 @@ class PhotoBoothEngine:
 
         return image.convert("RGB")
     
-    def _save_mp4(self, pil_photos, thumb_size=(1000, 3000), overlay=None):
-        """Menggabungkan frame video countdown menjadi file MP4 dengan kecepatan normal (18 FPS)."""
-        mp4_path = os.path.join(self.session_dir, "animasi_live.mp4")
+    @staticmethod
+    def _decode_jpeg(data):
+        arr = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_COLOR)
+        return Image.fromarray(cv2.cvtColor(arr, cv2.COLOR_BGR2RGB))
+
+    def _save_mp4(self, pil_photos, overlay=None, max_size=(1080, 1920)):
+        """Video = VIDEO_SECONDS detik terakhir sebelum tiap jepretan, diputar real-time
+        (di-resample berdasarkan timestamp, jadi durasi tetap benar walau fps kamera berbeda)."""
+        mp4_path = os.path.join(self.session_dir, "video_sesi.mp4")
         try:
-            gif_frames = []
-            max_frames = max((len(f) for f in self.live_frames), default=0)
-
-            if max_frames > 0:
-                for frame_idx in range(max_frames):
-                    current_slot_photos = []
-                    for slot_idx in range(len(self.config["layout"])):
-                        if slot_idx < len(self.live_frames) and self.live_frames[slot_idx]:
-                            frames_list = self.live_frames[slot_idx]
-                            img = frames_list[min(frame_idx, len(frames_list) - 1)]
-                        else:
-                            img = pil_photos[min(slot_idx, len(pil_photos) - 1)]
-                        current_slot_photos.append(img)
-
-                    # Komposisi frame + overlay
-                    composed = self._compose_photos(current_slot_photos, overlay, thumb_size)
-                    gif_frames.append(composed)
-
-            if not gif_frames:
+            layout = self.config["layout"]
+            clips = list(self.live_frames)
+            if not any(clips):
                 return None
 
-            # Ambil dimensi frame pertama
-            first_frame = np.array(gif_frames[0])
-            height, width, _ = first_frame.shape
+            canvas_w, canvas_h = self.config["width"], self.config["height"]
+            scale = min(1, max_size[0] / canvas_w, max_size[1] / canvas_h)
+            size = (max(1, round(canvas_w * scale)), max(1, round(canvas_h * scale)))
+            out_w, out_h = size[0] // 2 * 2, size[1] // 2 * 2  # encoder butuh ukuran genap
+            if overlay is not None and overlay.size != size:
+                overlay = overlay.resize(size, Image.LANCZOS)  # sekali saja, bukan per frame
 
-            # Inisialisasi VideoWriter dengan FPS normal (18 FPS) agar tidak ke-speed
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            fps = 18.0  # Kecepatan putar normal sesuai hasil tangkapan webcam
-            out = cv2.VideoWriter(mp4_path, fourcc, fps, (width, height))
+            writer = None
+            for codec in ("avc1", "mp4v"):  # H.264 bila tersedia, kalau tidak MPEG-4
+                writer = cv2.VideoWriter(
+                    mp4_path, cv2.VideoWriter_fourcc(*codec), float(VIDEO_FPS), (out_w, out_h)
+                )
+                if writer.isOpened():
+                    break
+                writer.release()
+                writer = None
+            if writer is None:
+                raise RuntimeError("Encoder video tidak tersedia.")
 
-            for pil_img in gif_frames:
-                # Konversi PIL Image (RGB) ke OpenCV Frame (BGR)
-                frame_bgr = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-                out.write(frame_bgr)
+            total = int(VIDEO_SECONDS * VIDEO_FPS)
+            pointers = [0] * len(layout)
+            cache = {}  # slot -> (index, PIL image)
 
-            out.release()
-            print(f"File MP4 Live Video kecepatan normal disimpan: {mp4_path}")
+            for k in range(total):
+                slot_images = []
+                for slot in range(len(layout)):
+                    clip = clips[slot] if slot < len(clips) else None
+                    if not clip:
+                        slot_images.append(pil_photos[min(slot, len(pil_photos) - 1)])
+                        continue
+                    t = clip[-1][0] - VIDEO_SECONDS + k / VIDEO_FPS
+                    idx = pointers[slot]
+                    while idx + 1 < len(clip) and clip[idx + 1][0] <= t:
+                        idx += 1
+                    pointers[slot] = idx
+                    if slot not in cache or cache[slot][0] != idx:
+                        cache[slot] = (idx, self._decode_jpeg(clip[idx][1]))
+                    slot_images.append(cache[slot][1])
+
+                composed = self._compose_photos(slot_images, overlay, max_size, fast=True)
+                if composed.size != (out_w, out_h):
+                    composed = composed.resize((out_w, out_h), Image.BILINEAR)
+                writer.write(cv2.cvtColor(np.array(composed), cv2.COLOR_RGB2BGR))
+
+            writer.release()
+            print(f"Video disimpan: {mp4_path} ({VIDEO_SECONDS} detik, {VIDEO_FPS} fps)")
             return mp4_path
-
-        except Exception as e:
-            print(f"Error pembuatan MP4 Video: {e}")
+        except Exception:
+            logging.exception("Pembuatan video MP4 gagal")
             return None
-        
+
     def upload_async(self, filepath, on_done=None, gif_path=None):
         def _worker():
             link = None
@@ -392,6 +437,23 @@ class PhotoBoothEngine:
                 link = self.upload_manager.upload_file(upload_path)
             except Exception:
                 logging.exception("Gagal menyiapkan atau mengupload hasil foto")
+            if on_done:
+                on_done(link)
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        return t
+
+    def upload_session_async(self, on_done=None):
+        """Upload semua file sesi (raw + template + video) ke satu folder Google Drive."""
+        def _worker():
+            link = None
+            try:
+                link = self.upload_manager.upload_session(
+                    self.session_files(), os.path.basename(self.session_dir)
+                )
+            except Exception:
+                logging.exception("Gagal mengupload folder sesi")
             if on_done:
                 on_done(link)
 

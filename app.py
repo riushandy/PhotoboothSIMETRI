@@ -721,25 +721,40 @@ class App(ctk.CTk):
             daemon=True,
         ).start()
 
-    def _run_session(self, *args, **kwargs):
+    def _run_session(self, template_data=None, cam_index=None, filter_idx=None):
         """Menjalankan sesi foto di background thread."""
-        try:
-            # Pembacaan aman untuk config template
-            config = getattr(self, "config", getattr(self, "current_config", getattr(self, "selected_config", None)))
-            
-            # Pembacaan aman untuk camera_index (default: 0)
-            cam_idx = getattr(self, "camera_index", getattr(self, "cam_index", getattr(self, "selected_camera", 0)))
-            
-            # 1. Inisialisasi engine kamera
-            engine = PhotoBoothEngine(config, camera_index=cam_idx)
-            
-            # 2. Jalankan pengambilan foto
-            success = engine.capture()
-            if not success:
-                return  # Pengguna membatalkan sesi (ESC)
+        # Simpan parameter terakhir supaya "Ulang Semua" memakai template yang sama.
+        if template_data is None:
+            template_data, cam_index, filter_idx = getattr(
+                self, "_last_session_args", (None, 0, 0)
+            )
+        else:
+            self._last_session_args = (template_data, cam_index, filter_idx)
 
-            # 3. Proses penggabungan foto komposit dan video MP4
-            composite_path, mp4_path = engine.process()
+        try:
+            if not template_data:
+                raise RuntimeError("Template belum dipilih.")
+
+            # PENTING: jangan pakai self.config -- itu method bawaan Tkinter
+            # (alias configure), sehingga config["photo_count"] memicu
+            # "'method' object is not subscriptable".
+            engine = PhotoBoothEngine(
+                template_data,
+                camera_index=cam_index or 0,
+                cancel_event=self._session_cancel,
+            )
+            engine.filter_idx = filter_idx or 0
+
+            # 2. Pengambilan foto (False = dibatalkan / timeout / ESC)
+            if not engine.capture():
+                self._finish_session()
+                return
+
+            # 3. Gabungkan foto komposit + video MP4
+            result = engine.process()
+            if not result:
+                raise RuntimeError("Tidak ada foto yang berhasil diproses.")
+            composite_path, mp4_path = result
 
             if not composite_path or not os.path.exists(composite_path):
                 raise RuntimeError("Gagal menghasilkan foto komposit.")
@@ -748,21 +763,24 @@ class App(ctk.CTk):
             self._run_on_ui(self._show_preview, engine, composite_path, mp4_path)
 
         except Exception as e:
+            logging.exception("Sesi foto gagal")
             err_msg = str(e)
-            logging.error(f"Sesi foto gagal: {err_msg}")
             self._run_on_ui(
-                lambda msg=err_msg: messagebox.showerror("Sesi Foto Gagal", f"Sesi tidak dapat diselesaikan:\n{msg}\n\nSilakan coba lagi.")
+                lambda msg=err_msg: messagebox.showerror(
+                    "Sesi Foto Gagal",
+                    f"Sesi tidak dapat diselesaikan:\n{msg}\n\nSilakan coba lagi.",
+                )
             )
+            self._finish_session()  # aktifkan kembali tombol template
 
     def _show_preview(self, engine, composite_path, gif_path):
         if getattr(self, "_active_preview_window", None) is not None and self._active_preview_window.root.winfo_exists():
             return
 
-        def do_upload(upload_path=None, include_gif=False):
-            upload_path = upload_path or composite_path
-            upload_type = "foto + GIF (ZIP)" if include_gif else ("GIF" if upload_path == gif_path else "foto")
+        def do_upload_all():
+            """Upload foto raw + foto template + video ke satu folder Google Drive."""
             self.status_label.configure(
-                text=f"📤 Mengupload {upload_type}...", text_color=ORANGE
+                text="📤 Mengupload semua file ke Google Drive...", text_color=ORANGE
             )
 
             def on_upload_done(link):
@@ -771,7 +789,6 @@ class App(ctk.CTk):
             def handle_upload_done(link):
                 if link:
                     qr_path = engine.upload_manager.generate_qr(link)
-                    reupload = lambda: do_upload(upload_path, include_gif=include_gif)
                     return_to_result = lambda: self._show_preview(
                         engine, composite_path, gif_path
                     )
@@ -780,9 +797,9 @@ class App(ctk.CTk):
                         qr_path,
                         link,
                         40,
-                        reupload,
+                        do_upload_all,
                         return_to_result,
-                        download_label="Foto + GIF — buka ZIP untuk mengambil keduanya" if include_gif else upload_type,
+                        download_label="Semua file: foto raw + foto template + video",
                         timeout_callback=self._finish_session,
                         wait=False,
                     )
@@ -792,7 +809,7 @@ class App(ctk.CTk):
                                "Tidak bisa upload.\nPastikan laptop terhubung internet.\n\nFoto disimpan lokal.")
                     self._finish_session()
 
-            engine.upload_async(upload_path, on_done=on_upload_done, gif_path=gif_path if include_gif else None)
+            engine.upload_session_async(on_done=on_upload_done)
 
         def do_print(image_path):
             self.status_label.configure(text="🖨 Mengirim ke printer...", text_color=ORANGE)
@@ -813,7 +830,7 @@ class App(ctk.CTk):
                 messagebox.showerror("Kamera Sibuk", "Tunggu sebentar lalu pilih template lagi.")
                 return
             self.status_label.configure(text="🔄 Retake...", text_color=ORANGE)
-            threading.Thread(target=self._run_session, daemon=True).start()
+            threading.Thread(target=self._run_session, daemon=True).start()  # pakai _last_session_args
 
         def do_retake_one(photo_index):
             self._session_cancel.clear()
@@ -838,12 +855,12 @@ class App(ctk.CTk):
 
         preview = PreviewWindow(
             composite_path,
-            do_upload,
+            do_upload_all,
             do_retake,
             do_save,
             print_callback=do_print,
             gif_path=gif_path,
-            bundle_callback=lambda: do_upload(composite_path, include_gif=True),
+            bundle_callback=do_upload_all,
             photo_previews=[engine.get_photo_preview(i) for i in range(len(engine.photos))],
             retake_one_callback=do_retake_one,
         )

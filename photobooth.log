@@ -220,3 +220,55 @@ Traceback (most recent call last):
 NameError: cannot access free variable 'e' where it is not associated with a value in enclosing scope
 2026-10-21 22:16:49,578 ERROR Sesi foto gagal: '_tkinter.tkapp' object has no attribute 'camera_index'
 2026-10-21 22:19:40,087 ERROR Sesi foto gagal: 'method' object is not subscriptable
+2026-10-21 22:23:04,830 ERROR Sesi foto gagal: 'method' object is not subscriptable
+2026-10-21 22:45:30,476 ERROR Callback UI gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 375, in _poll_ui_queue
+    callback(*args)
+    ~~~~~~~~^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 870, in _show_preview
+    preview.show(wait=False)
+    ~~~~~~~~~~~~^^^^^^^^^^^^
+  File "C:\github riu\PhotoboothSIMETRI\preview_window.py", line 116, in show
+    tk.Label(photo_panel, bg=CARD, image=self.photo_tk).pack(padx=10, pady=(0, 10))
+                                         ^^^^^^^^^^^^^
+AttributeError: 'PreviewWindow' object has no attribute 'photo_tk'
+2026-10-22 10:34:39,997 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 754, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 301, in process
+    overlay = source.convert("RGBA")
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 1079, in convert
+    return self.copy()
+           ~~~~~~~~~^^
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 1363, in copy
+    return self._new(self.im.copy())
+                     ~~~~~~~~~~~~^^
+MemoryError
+2026-10-22 10:36:07,178 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 754, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 303, in process
+    overlay = overlay.resize((canvas_w, canvas_h), Image.LANCZOS)
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 2416, in resize
+    im = self.convert({"LA": "La", "RGBA": "RGBa"}[self.mode])
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 1232, in convert
+    im = self.im.convert(mode, dither)
+MemoryError
+2026-10-22 10:41:20,760 INFO Foto dicetak ke 'Brother DCP-L2540DW series Printer' (2378x3406px): C:\github riu\PhotoboothSIMETRI\riwayat\Sesi_20261022_103944_56978e\foto_frame.jpg
+2026-10-22 14:01:55,769 INFO Foto dicetak ke 'Canon E510 series Printer' (2485x3727px = 102x152mm): C:\github riu\PhotoboothSIMETRI\riwayat\Sesi_20261022_140055_a71b10\foto_frame.jpg
+2026-10-22 15:00:53,862 ERROR Sesi foto gagal
+Traceback (most recent call last):
+  File "C:\github riu\PhotoboothSIMETRI\app.py", line 754, in _run_session
+    result = engine.process()
+  File "C:\github riu\PhotoboothSIMETRI\camera_engine.py", line 301, in process
+    overlay = source.convert("RGBA")
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 1079, in convert
+    return self.copy()
+           ~~~~~~~~~^^
+  File "C:\Users\ADVAN\AppData\Local\Programs\Python\Python313\Lib\site-packages\PIL\Image.py", line 1363, in copy
+    return self._new(self.im.copy())
+                     ~~~~~~~~~~~~^^
+MemoryError

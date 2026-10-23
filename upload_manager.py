@@ -24,14 +24,14 @@ class UploadManager:
     # UPLOAD
     # ─────────────────────────────────────────────────────────────
 
-    def upload_file(self, filepath):
+    def upload_file(self, filepath, use_drive=True):
         """Upload ke tmpfiles.org dengan fallback ke catbox.moe jika DNS/koneksi gagal."""
         filename = os.path.basename(filepath)
         file_size = os.path.getsize(filepath)
 
         # Utama: Google Drive. Jika belum di-setup/gagal, lanjut ke layanan cadangan.
         drive = get_drive_manager()
-        if drive.is_ready():
+        if use_drive and drive.is_ready():
             print(f"[Upload] {filename} ({file_size // 1024} KB) ke Google Drive...")
             link = drive.upload_file(filepath)
             if link:
@@ -80,6 +80,32 @@ class UploadManager:
 
         print("Semua server upload gagal.")
         return None
+    def upload_session(self, files, session_name):
+        """Satu link untuk seluruh hasil sesi: folder Google Drive berisi semua file.
+        Jika Drive belum aktif/gagal, semua file di-ZIP lalu diupload ke layanan cadangan."""
+        if not files:
+            return None
+        drive = get_drive_manager()
+        if drive.is_ready():
+            print(f"[Upload] {len(files)} file ke folder Google Drive '{session_name}'...")
+            link = drive.upload_folder(files, session_name)
+            if link:
+                self.storage_note = "Tersimpan di Google Drive"
+                print(f"Upload folder berhasil (Drive)! Link: {link}")
+                return link
+            print("Upload folder Drive gagal, memakai ZIP cadangan...")
+        else:
+            print("Google Drive belum di-setup (lihat README_DRIVE.md), memakai ZIP cadangan...")
+
+        zip_path = os.path.join(os.path.dirname(files[0]), f"{session_name}.zip")
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as bundle:
+            for path in files:
+                bundle.write(path, arcname=os.path.basename(path))
+        link = self.upload_file(zip_path, use_drive=False)
+        if link:
+            self.storage_note = "Drive belum aktif - ZIP aktif ±1 jam"
+        return link
+
     # ─────────────────────────────────────────────────────────────
     # QR CODE
     # ─────────────────────────────────────────────────────────────
@@ -282,4 +308,3 @@ class UploadManager:
             bundle.write(photo_path, arcname="foto.jpg")
             bundle.write(gif_path, arcname="animasi.gif")
         return bundle_path
-

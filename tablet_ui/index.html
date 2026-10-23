@@ -1,94 +1,218 @@
 <!doctype html>
 <html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-<title>Photobooth</title>
+<title>SIMETRI 2026 Photobooth</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
-*{box-sizing:border-box}
-body{margin:0;font-family:system-ui,sans-serif;background:#0f1b2d;color:#fff;user-select:none}
-.screen{display:none;padding:16px;min-height:100vh}.screen.on{display:block}
-h1{margin:4px 0 12px;font-size:28px;text-align:center}
-.wrap{position:relative;max-width:720px;margin:0 auto}
-.cam{width:100%;display:block;border-radius:16px;background:#000;transform:scaleX(-1)}
-#count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:200px;font-weight:700;text-shadow:0 0 30px #000}
-#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;transition:opacity .25s;border-radius:16px}
-#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:16px}
-.card{background:#1d2e4a;border-radius:14px;padding:8px;text-align:center}
-.card img{width:100%;height:180px;object-fit:contain}.card:active{transform:scale(.97)}
-.btn{font-size:22px;padding:16px 28px;border:0;border-radius:14px;background:#2aa9ff;color:#fff;margin:8px}
-.btn.alt{background:#44556f}
-.center{text-align:center}
-#result{max-width:100%;max-height:62vh;border-radius:12px}
-#qr{width:220px;background:#fff;padding:8px;border-radius:8px}
-#msg{text-align:center;min-height:26px;color:#ff9a9a}#conn{position:fixed;top:4px;right:8px;font-size:13px;color:#ffd36b}
-</style></head><body>
-<div id="conn"></div>
+/* Font & warna: ganti di sini saja agar sama dengan situs SIMETRI */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Poppins:wght@400;600&display=swap');
+:root{--font-display:'Cinzel',Georgia,serif;--font-body:'Poppins',system-ui,sans-serif;--ink:#0f2b3d;--primary:#2f7fa8;--accent:#d9a441}
+body{font-family:var(--font-body);color:var(--ink);user-select:none;overscroll-behavior:none}
+.display{font-family:var(--font-display)}
+.mirror{transform:scaleX(-1)}
+.btn{font-family:var(--font-display);font-weight:800;letter-spacing:.06em;border-radius:1rem;padding:1rem 1.5rem;font-size:1.25rem;background:var(--primary);color:#fff;box-shadow:0 6px 0 #1d5876;transition:transform .08s}
+.btn:active{transform:translateY(4px);box-shadow:0 2px 0 #1d5876}
+.btn.alt{background:#fff;color:var(--ink);box-shadow:0 6px 0 #cfd9df;border:2px solid #cfd9df}
+.btn.gold{background:var(--accent);box-shadow:0 6px 0 #a87a22;color:#2b1d00}
+.card{background:#fff;border-radius:1.5rem;box-shadow:0 8px 30px rgba(15,43,61,.12);border:1px solid #e6edf1}
+.tcard{border:3px solid transparent}.tcard.on{border-color:var(--accent)}
+.retake{position:absolute;width:3.2rem;height:3.2rem;border-radius:9999px;background:var(--accent);color:#2b1d00;font-size:1.7rem;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.35)}
+.pop{animation:pop .4s forwards}@keyframes pop{to{transform:scale(2);opacity:0}}
+.float{animation:fl 2.6s ease-in forwards}@keyframes fl{from{transform:translateY(0)}to{transform:translateY(-60px)}}
+.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}
+</style></head>
+<body class="h-screen w-screen overflow-hidden bg-white">
 
-<div id="s_idle" class="screen">
-  <h1>Pilih Template</h1>
-  <div class="wrap" style="max-width:320px"><img id="cam1" class="cam"></div>
-  <div id="grid"></div>
-</div>
+<!-- 1. STANDBY -->
+<section id="p_standby" class="page absolute inset-0">
+  <img id="cam0" class="mirror absolute inset-0 w-full h-full object-cover" alt="">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="absolute inset-0 flex flex-col items-center justify-center gap-10 text-center">
+    <h1 class="display text-white font-extrabold text-7xl tracking-widest drop-shadow-lg">SIMETRI 2026</h1>
+    <button class="btn gold text-3xl px-16 py-5" onclick="go('p_tpl')">MULAI</button>
+  </div>
+</section>
 
-<div id="s_shoot" class="screen">
-  <h1 id="shotlabel"></h1>
-  <div class="wrap"><img id="cam2" class="cam"><div id="count"></div><div id="flash"></div></div>
-  <div class="center"><button class="btn alt" onclick="post('/api/cancel')">Batal</button></div>
-</div>
+<!-- 2. PILIH TEMPLATE -->
+<section id="p_tpl" class="page hidden absolute inset-0 p-6">
+  <div class="grid grid-cols-12 gap-6 h-full">
+    <div class="card col-span-8 p-5 flex flex-col min-h-0">
+      <h2 class="display text-3xl font-extrabold mb-4">Pilih Template</h2>
+      <div id="grid" class="grid grid-cols-3 gap-4 overflow-y-auto pr-1 flex-1"></div>
+    </div>
+    <div class="card col-span-4 p-5 flex flex-col min-h-0">
+      <button class="self-start text-lg font-semibold text-[color:var(--primary)]" onclick="go('p_standby')">← Kembali</button>
+      <div class="flex-1 min-h-0 flex items-center justify-center py-3"><img id="big" class="max-h-full max-w-full object-contain" alt=""></div>
+      <div id="bigname" class="display text-2xl font-extrabold text-center"></div>
+      <div id="bigcount" class="text-center text-slate-500 mb-3"></div>
+      <button class="btn w-full" onclick="go('p_ready')">PILIH TEMPLATE</button>
+    </div>
+  </div>
+</section>
 
-<div id="s_proc" class="screen center"><h1 style="margin-top:30vh">Memproses foto...</h1></div>
+<!-- 3. SIAP FOTO & 4. COUNTDOWN (satu layout) -->
+<section id="p_ready" class="page hidden absolute inset-0 p-6 flex flex-col gap-4">
+  <div class="card flex-1 min-h-0 relative overflow-hidden bg-black">
+    <img id="cam1" class="mirror w-full h-full object-contain" alt="">
+    <button class="absolute top-4 left-4 btn alt !py-2 !px-4 !text-base" onclick="go('p_tpl')">← Template</button>
+  </div>
+  <div class="card p-4 grid grid-cols-3 gap-4 items-center">
+    <button id="filterbtn" class="btn alt" onclick="nextFilter()">FILTER</button>
+    <select id="camsel" class="btn alt appearance-none text-center" onchange="setCam(this.value)"></select>
+    <button class="btn gold" onclick="startSession()">MULAI SESI</button>
+  </div>
+</section>
 
-<div id="s_result" class="screen center">
-  <img id="result"><br>
-  <div id="qrbox"></div>
-  <div id="actions">
-    <button class="btn alt" onclick="post('/api/reset')">Ulang</button>
-    <button class="btn" id="upbtn" onclick="post('/api/upload')">Upload &amp; QR</button>
+<section id="p_shoot" class="page hidden absolute inset-0 p-6 flex flex-col gap-4">
+  <div class="card flex-1 min-h-0 relative overflow-hidden bg-black">
+    <img id="cam2" class="mirror w-full h-full object-contain" alt="">
+    <div id="shotlabel" class="absolute top-4 left-1/2 -translate-x-1/2 display text-white text-3xl font-extrabold bg-black/40 rounded-full px-6 py-1"></div>
+    <div id="count" class="absolute inset-0 flex items-center justify-center display text-white font-extrabold text-[16rem] drop-shadow-[0_0_30px_rgba(0,0,0,.8)]"></div>
+    <div id="flash" class="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-200"></div>
+  </div>
+</section>
+
+<!-- 5. MEMPROSES (game) -->
+<section id="p_proc" class="page hidden absolute inset-0 bg-white overflow-hidden">
+  <div class="absolute top-10 inset-x-0 text-center">
+    <h2 class="display text-5xl font-extrabold">Meracik fotomu...</h2>
+    <p class="mt-2 text-xl text-slate-500">Sambil menunggu, tangkap bintangnya! <b id="score" class="text-[color:var(--accent)]">0</b> poin</p>
+  </div>
+  <div id="arena" class="absolute inset-x-0 top-40 bottom-28"></div>
+  <div class="absolute bottom-10 inset-x-20 h-6 rounded-full bg-slate-200 overflow-hidden"><div id="bar" class="h-full w-0 rounded-full bg-[color:var(--primary)] transition-all duration-500"></div></div>
+</section>
+
+<!-- 6. HASIL -->
+<section id="p_result" class="page hidden absolute inset-0 p-6">
+  <div class="card h-full p-6 flex flex-col gap-4">
+    <div class="grid grid-cols-3 gap-6 flex-1 min-h-0">
+      <div class="flex items-center justify-center min-h-0"><img id="r_frame" class="max-h-full max-w-full object-contain rounded-xl" alt=""></div>
+      <div class="flex items-center justify-center min-h-0"><video id="r_video" class="max-h-full max-w-full rounded-xl bg-black" autoplay loop muted playsinline onerror="this.outerHTML='<p class=&quot;text-center text-slate-500&quot;>Video belum bisa diputar di perangkat ini</p>'"></video></div>
+      <div class="flex items-center justify-center min-h-0"><div id="r_wrap" class="relative h-full"><img id="r_frame2" class="h-full w-full object-contain rounded-xl" alt=""></div></div>
+    </div>
+    <div class="grid grid-cols-3 gap-6">
+      <button class="btn" onclick="doPrint()">🖨 PRINT</button>
+      <button class="btn gold" onclick="doQR()">📲 QR DOWNLOAD</button>
+      <div class="grid grid-cols-2 gap-3">
+        <button class="btn alt !px-2" onclick="post('/api/restart')">ULANG SEMUA</button>
+        <button class="btn alt !px-2" onclick="finish()">SELESAI</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 7-9. POP UP -->
+<div id="modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
+  <div class="card w-[520px] max-w-[92vw] p-8 text-center">
+    <h3 id="m_title" class="display text-3xl font-extrabold mb-4"></h3>
+    <div id="m_body" class="text-lg mb-6"></div>
+    <button id="m_btn" class="btn w-full"></button>
   </div>
 </div>
-<div id="msg"></div>
 
 <script>
 const $=id=>document.getElementById(id);
-const post=u=>fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
-let cur="",stamp=0,upl="";
-function show(id){
-  if(cur===id)return;cur=id;
-  document.querySelectorAll(".screen").forEach(e=>e.classList.toggle("on",e.id===id));
-  $("cam1").src=id==="s_idle"?"/stream?"+Date.now():"";
-  $("cam2").src=id==="s_shoot"?"/stream?"+Date.now():"";
+const post=(u,b)=>fetch(u,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b||{})}).then(r=>r.json().catch(()=>({})));
+let page="p_standby",tpls=[],cur=null,filters={names:[],current:0},lastErr=0,printDone=false,qrShown=null,stamp=0,offline=false,modalKind="";
+
+/* ── navigasi & stream ── */
+const CAMS={p_standby:"cam0",p_ready:"cam1",p_shoot:"cam2"};
+function go(id){
+  if(id===page)return;page=id;
+  document.querySelectorAll(".page").forEach(e=>e.classList.toggle("hidden",e.id!==id));
+  for(const [p,c] of Object.entries(CAMS))$(c).src=p===id?"/stream?"+Date.now():"";
+  if(id==="p_proc")startGame();
 }
-async function loadTemplates(){
-  const list=await (await fetch("/api/templates")).json();
-  $("grid").innerHTML=list.map(t=>`<div class="card" onclick="start('${t.id}')"><img src="/thumb/${t.id}"><div>${t.name} · ${t.count} foto</div></div>`).join("");
+/* ── pop up ── */
+function modal(title,body,btn,onOk,kind){
+  modalKind=kind||"";$("m_title").textContent=title;$("m_body").innerHTML=body;
+  const b=$("m_btn");b.style.display=btn?"":"none";b.textContent=btn||"";
+  b.onclick=()=>{closeModal();onOk&&onOk()};$("modal").classList.remove("hidden");
 }
-async function start(id){
-  const r=await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({template:id})});
-  if(!r.ok)$("msg").textContent=(await r.json()).error;
+function closeModal(){$("modal").classList.add("hidden");modalKind=""}
+const spinner='<div class="spin mx-auto h-12 w-12 rounded-full border-4 border-slate-200 border-t-[color:var(--primary)]"></div>';
+
+/* ── template ── */
+function pick(t){
+  cur=t;$("big").src="/thumb/"+t.id;$("bigname").textContent=t.name;$("bigcount").textContent=t.count+" foto";
+  document.querySelectorAll(".tcard").forEach(e=>e.classList.toggle("on",e.dataset.id===t.id));
 }
+async function init(){
+  tpls=await (await fetch("/api/templates")).json();
+  $("grid").innerHTML=tpls.map(t=>`<div class="tcard card p-3 text-center" data-id="${t.id}" onclick='pick(${JSON.stringify(t)})'><img src="/thumb/${t.id}" class="h-44 w-full object-contain"><div class="mt-2 font-semibold">${t.name}</div></div>`).join("");
+  if(tpls.length)pick(tpls[0]);
+  filters=await (await fetch("/api/filters")).json();showFilter();
+  const c=await (await fetch("/api/cameras")).json();
+  $("camsel").innerHTML=c.list.map((n,i)=>`<option value="${i}" ${i===c.current?"selected":""}>🎥 ${n}</option>`).join("");
+  go("p_standby");poll();
+}
+function showFilter(){$("filterbtn").textContent="FILTER: "+(filters.names[filters.current]||"-")}
+async function nextFilter(){filters=await post("/api/filter",{index:(filters.current+1)%filters.names.length});showFilter()}
+async function setCam(i){await post("/api/camera",{index:+i});$("cam1").src="/stream?"+Date.now()}
+async function startSession(){const r=await post("/api/start",{template:cur.id});if(r.error)modal("Oops",r.error,"OK")}
+
+/* ── hasil ── */
+function renderResult(s){
+  if(s.stamp===stamp)return;stamp=s.stamp;
+  const u="/frame.jpg?"+stamp;$("r_frame").src=u;$("r_frame2").src=u;
+  $("r_wrap").style.aspectRatio=s.canvas[0]+"/"+s.canvas[1];
+  $("r_wrap").querySelectorAll(".retake").forEach(e=>e.remove());
+  s.slots.forEach((p,i)=>{const b=document.createElement("button");b.className="retake";b.textContent="↺";
+    b.style.left=(p.l+p.w)+"%";b.style.top=p.t+"%";b.style.transform="translate(-115%,15%)";
+    b.onclick=()=>post("/api/retake",{index:i});$("r_wrap").appendChild(b)});
+  if(s.has_video){$("r_video").src="/video.mp4?"+stamp;$("r_video").play().catch(()=>{})}
+}
+async function doQR(){
+  const s=await (await fetch("/api/status")).json();
+  if(s.upload==="done")showQR(s.link);else await post("/api/upload");
+}
+function showQR(link){modal("Scan untuk Download",`<img src="/api/qr?${Date.now()}" class="mx-auto w-64 rounded-xl border p-2"><p class="mt-3 text-sm break-all text-slate-500">${link}</p>`,"SELESAI");}
+function doPrint(){post("/api/print")}
+function finish(){post("/api/reset");qrShown=null;go("p_standby")}
+
+/* ── game saat memproses ── */
+let gameT=null,score=0;
+function startGame(){
+  score=0;$("score").textContent=0;$("arena").innerHTML="";let p=5;$("bar").style.width="5%";
+  clearInterval(gameT);
+  gameT=setInterval(()=>{
+    if(page!=="p_proc"){clearInterval(gameT);return}
+    p=Math.min(95,p+3);$("bar").style.width=p+"%";
+    const e=document.createElement("button"),a=$("arena");
+    e.textContent=["⭐","📸","✨","🎞️","💙"][Math.random()*5|0];e.className="float absolute text-6xl";
+    e.style.left=Math.random()*(a.clientWidth-80)+"px";e.style.top=Math.random()*(a.clientHeight-80)+"px";
+    e.onpointerdown=()=>{score++;$("score").textContent=score;e.classList.add("pop");setTimeout(()=>e.remove(),400)};
+    a.appendChild(e);setTimeout(()=>e.remove(),2600);
+  },550);
+}
+
+/* ── polling status ── */
 function render(s){
-  $("msg").textContent=s.error||"";
-  if(s.phase==="idle")show("s_idle");
-  else if(s.phase==="countdown"||s.phase==="flash"){
-    show("s_shoot");
-    $("shotlabel").textContent=`Foto ${s.shot}/${s.total}`;
-    $("count").textContent=s.phase==="countdown"?s.count:"";
-    $("flash").style.opacity=s.phase==="flash"?0.9:0;
-  }else if(s.phase==="processing")show("s_proc");
-  else if(s.phase==="result"){
-    show("s_result");
-    if(s.stamp!==stamp){stamp=s.stamp;$("result").src="/result.jpg?"+stamp;}
-    if(s.upload!==upl){
-      upl=s.upload;
-      $("qrbox").innerHTML=s.upload==="done"?`<p>Scan untuk download:</p><img id="qr" src="/api/qr?${Date.now()}"><p style="font-size:13px;word-break:break-all">${s.link}</p>`
-        :s.upload==="uploading"?"<p>Mengupload...</p>":"";
-      $("upbtn").style.display=s.upload==="done"?"none":"";
-    }
-  }
+  if(s.error_id!==lastErr){lastErr=s.error_id;if(s.error)modal("Terjadi Masalah",s.error,"COBA LAGI")}
+  const shoot=s.phase==="countdown"||s.phase==="flash";
+  if(shoot){
+    go("p_shoot");$("shotlabel").textContent=`Foto ${s.shot}/${s.total}`;
+    $("count").textContent=s.phase==="countdown"?s.count:"";$("flash").style.opacity=s.phase==="flash"?.9:0;
+  }else if(s.phase==="processing")go("p_proc");
+  else if(s.phase==="result"){go("p_result");renderResult(s);$("bar").style.width="100%"}
+  else if(["p_shoot","p_proc","p_result"].includes(page))go("p_ready");  // batal / gagal
+  /* upload */
+  if(s.upload==="uploading"&&modalKind!=="up")modal("Mengupload...",spinner+'<p class="mt-4">Menyimpan ke Google Drive</p>',"","","up");
+  if(s.upload==="done"&&qrShown!==s.link){qrShown=s.link;showQR(s.link)}
+  /* cetak */
+  if(s.print==="printing"&&modalKind!=="pr")modal("Mencetak...",spinner+'<p class="mt-4">Mengirim ke printer</p>',"","","pr");
+  if(s.print===""){printDone=false}
+  else if((s.print==="done"||s.print==="error")&&!printDone){printDone=true;
+    modal(s.print==="done"?"Cetak":"Cetak Gagal",s.print==="done"?"Foto berhasil dikirim ke printer.":"Periksa printer lalu coba lagi.","OK",()=>post("/api/ack_print"))}
 }
 async function poll(){
-  try{render(await (await fetch("/api/status")).json());$("conn").textContent="";}
-  catch(e){$("conn").textContent="Menyambung ulang...";}
+  try{
+    render(await (await fetch("/api/status")).json());
+    if(offline){offline=false;if(modalKind==="off")closeModal();$(CAMS[page]||"cam0").src="/stream?"+Date.now()}
+  }catch(e){
+    if(!offline){offline=true;modal("Menyambung ulang...",spinner+'<p class="mt-4">Koneksi ke laptop terputus. Sesi tetap aman.</p>',"","","off")}
+  }
   setTimeout(poll,350);
 }
-loadTemplates();poll();
+init();
 </script></body></html>

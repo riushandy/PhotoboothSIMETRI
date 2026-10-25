@@ -1,4 +1,5 @@
 @echo off
-python import_templates.py
+cd /d "%~dp0"
+python scripts\import_templates.py
 pause
  

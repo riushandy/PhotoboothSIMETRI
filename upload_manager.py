@@ -95,7 +95,7 @@ class UploadManager:
                 return link
             print("Upload folder Drive gagal, memakai ZIP cadangan...")
         else:
-            print("Google Drive belum di-setup (lihat README_DRIVE.md), memakai ZIP cadangan...")
+            print("Google Drive belum di-setup (lihat docs/README_DRIVE.md), memakai ZIP cadangan...")
 
         zip_path = os.path.join(os.path.dirname(files[0]), f"{session_name}.zip")
         with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_STORED) as bundle:

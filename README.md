@@ -10,6 +10,23 @@ Program ini mengambil beberapa foto berturut-turut dan menyusunnya sesuai layout
    pip install -r requirements.txt
    ```
 
+## Struktur Project
+
+```text
+app.py, camera_engine.py, ...   Modul aplikasi utama
+tablet_server.py               Server untuk antarmuka tablet
+tablet_ui/                     Antarmuka web tablet
+assets/                         Template foto dan aset meme
+scripts/                        Utilitas kamera, template, dan aset
+docs/                           Dokumentasi setup dan penggunaan
+tests/                          Tes otomatis
+riwayat/                        Hasil sesi (dibuat saat aplikasi berjalan)
+```
+
+Modul aplikasi utama tetap berada di folder root agar import lama dan launcher tetap kompatibel. Jalankan perintah dari folder project, atau gunakan file `.bat` yang tersedia.
+
+Panduan tambahan: [setup Google Drive](docs/README_DRIVE.md) dan [server tablet](docs/README_TABLET.md). Skrip utilitas dijalankan dari root project, misalnya `python scripts/import_templates.py`.
+
 ## Cara Menjalankan
 
 Buka PowerShell di folder utama proyek, lalu jalankan photobooth dengan salah satu perintah berikut:
@@ -76,7 +93,7 @@ Untuk penggunaan lama, pastikan pengaturan sleep laptop sesuai kebutuhan. Pemuli
 ### Alur Foto
 
 1. Pilih template di aplikasi. Jendela kamera akan terbuka; tekan **SPASI** untuk memulai pengambilan foto.
-2. Program menghitung mundur 6 detik untuk setiap foto. Jumlah foto mengikuti konfigurasi template.
+2. Program menghitung mundur 10 detik untuk setiap foto. Jumlah foto mengikuti konfigurasi template.
 3. Hasil JPG dan GIF otomatis disimpan dengan nama unik di folder `riwayat`, sebelum ditampilkan di jendela preview. Tidak perlu menekan tombol simpan.
 4. GIF memakai seluruh bingkai template. Foto bergantian di setiap slot dengan urutan boomerang; rasio bingkai dipertahankan, dengan ukuran maksimal 480 × 720 piksel.
 
@@ -95,6 +112,13 @@ Untuk penggunaan lama, pastikan pengaturan sleep laptop sesuai kebutuhan. Pemuli
 3. Scan QR menggunakan HP, tekan **Download** di halaman tmpfiles.org yang terbuka, lalu ekstrak/buka ZIP untuk mengambil kedua file.
 
 Tombol **Download Foto** dan **Download GIF** tetap tersedia untuk download terpisah. Tombol gabungan hanya muncul jika GIF berhasil dibuat. Upload memerlukan internet; JPG, GIF, dan ZIP tetap tersimpan lokal. Menurut [dokumentasi API tmpfiles.org](https://tmpfiles.org/api), link secara default kedaluwarsa setelah 1 jam.
+
+### Cetak Foto
+
+- Di aplikasi tablet, pilih printer dan jumlah salinan, lalu periksa pratinjau sebelum mencetak.
+- Aplikasi desktop memakai printer dan mode di `print_config.json`. Ukuran kertas dan kualitas cetak mengikuti pengaturan driver printer di Windows.
+- Sebelum dikirim ke driver, gambar cetak besar dikecilkan ke maksimal 300 DPI sesuai ukuran fisik area cetak agar penggunaan memori terkendali; ini tetap memadai untuk cetak foto umum.
+- Opsi `duplicate_strip` mencetak dua salinan berdampingan untuk gambar strip yang sempit. Ukuran fisik akhir mengikuti ukuran kertas dan area cetak printer.
 
 ### Ulang Satu Foto
 

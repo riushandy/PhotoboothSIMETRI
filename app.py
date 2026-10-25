@@ -1,21 +1,22 @@
-import customtkinter as ctk
-from print_manager import PrintManager
+import json
+import logging
+import os
+import queue
+import threading
+from logging.handlers import RotatingFileHandler
 import tkinter as tk
 from tkinter import messagebox
-import os
-import json
-import threading
-import queue
-import logging
-from logging.handlers import RotatingFileHandler
+
 import cv2
+import customtkinter as ctk
 import numpy as np
 from PIL import Image, ImageTk
 
-from camera_engine import PhotoBoothEngine, list_available_cameras
-from preview_window import PreviewWindow
 from filter_engine import apply_filter, get_filter_name, FILTER_COUNT
 from idle_timer import IdleTimer
+from camera_engine import PhotoBoothEngine, list_available_cameras
+from print_manager import PrintManager
+from preview_window import PreviewWindow
 
 # ── Theme ──────────────────────────────────────────────────────────
 ctk.set_appearance_mode("Dark")
@@ -171,7 +172,7 @@ class LiveCamSidebar(ctk.CTkFrame):
             height=CONTROL_HEIGHT,
             corner_radius=10,
         ).pack(pady=(4, 12))
-        self._poll_after = self.after(35, self._poll_frame)
+        self._poll_after = self.after(16, self._poll_frame)
 
     def start(self, cam_index=0):
         if self._destroyed:
@@ -223,6 +224,10 @@ class LiveCamSidebar(ctk.CTkFrame):
                 if not cap.isOpened():
                     cap.release()
                     cap = cv2.VideoCapture(cam_index)
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                cap.set(cv2.CAP_PROP_FPS, 30)
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
                 failures = 0
                 while not stop_event.is_set() and cap.isOpened():
                     ret, frame = cap.read()
@@ -236,10 +241,14 @@ class LiveCamSidebar(ctk.CTkFrame):
                         continue
                     failures = 0
                     frame = cv2.flip(frame, 1)
+                    h, w = frame.shape[:2]
+                    scale = min(self.PREVIEW_W / w, self.PREVIEW_H / h, 1.0)
+                    preview_size = (max(1, round(w * scale)), max(1, round(h * scale)))
+                    if preview_size != (w, h):
+                        frame = cv2.resize(frame, preview_size, interpolation=cv2.INTER_AREA)
                     frame = apply_filter(frame, self.current_filter)
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                     pil = Image.fromarray(frame_rgb)
-                    pil.thumbnail((self.PREVIEW_W, self.PREVIEW_H), Image.LANCZOS)
                     try:
                         if self._frame_queue.full():
                             self._frame_queue.get_nowait()
@@ -249,7 +258,6 @@ class LiveCamSidebar(ctk.CTkFrame):
                     except queue.Full:
                         pass
                     self._camera_status = "📷 Live Preview"
-                    stop_event.wait(0.035)
             except Exception:
                 logging.exception("Live preview gagal; mencoba sambungkan ulang")
             finally:
@@ -285,7 +293,7 @@ class LiveCamSidebar(ctk.CTkFrame):
             logging.exception("Gagal menampilkan live preview")
         finally:
             if not self._destroyed:
-                delay = 250 if self._stop_event.is_set() else 35
+                delay = 250 if self._stop_event.is_set() else 16
                 self._poll_after = self.after(delay, self._poll_frame)
 
     def _clear_frame_queue(self):

@@ -1,5 +1,6 @@
-import os
 import json
+import os
+
 from PIL import Image, ImageDraw, ImageFont
 
 ASSETS_DIR = "assets/templates"

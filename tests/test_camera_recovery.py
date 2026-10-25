@@ -120,6 +120,27 @@ class CameraRecoveryTests(unittest.TestCase):
         event.wait.assert_any_call(2.0)
         self.assertIn("terputus", sidebar._camera_status)
 
+    def test_preview_resizes_frame_before_applying_filter(self):
+        sidebar = make_sidebar()
+        event = threading.Event()
+        cap = Mock()
+        frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+        reads = iter([(True, frame), (True, frame)])
+
+        def read_frame():
+            result = next(reads)
+            if cap.read.call_count >= 2:
+                event.set()
+            return result
+
+        cap.read.side_effect = read_frame
+        with patch("app.cv2.VideoCapture", return_value=cap), patch(
+            "app.apply_filter", side_effect=lambda image, _filter: image
+        ) as apply_filter:
+            LiveCamSidebar._loop(sidebar, 2, event)
+        self.assertEqual(apply_filter.call_args.args[0].shape[:2], (135, 240))
+        cap.release.assert_called_once()
+
     def test_preview_recovers_when_camera_returns(self):
         sidebar = make_sidebar()
         event = threading.Event()

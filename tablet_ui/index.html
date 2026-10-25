@@ -103,10 +103,11 @@ body{font-family:var(--font-body);color:var(--ink);user-select:none;overscroll-b
 
 <!-- 7-9. POP UP -->
 <div id="modal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center">
-  <div class="card w-[520px] max-w-[92vw] p-8 text-center">
+  <div class="card w-[520px] max-w-[92vw] max-h-[94vh] overflow-y-auto p-8 text-center">
     <h3 id="m_title" class="display text-3xl font-extrabold mb-4"></h3>
     <div id="m_body" class="text-lg mb-6"></div>
     <button id="m_btn" class="btn w-full"></button>
+    <button id="m_btn2" class="btn alt w-full mt-4 hidden"></button>
   </div>
 </div>
 
@@ -124,10 +125,12 @@ function go(id){
   if(id==="p_proc")startGame();
 }
 /* ── pop up ── */
-function modal(title,body,btn,onOk,kind){
+function modal(title,body,btn,onOk,kind,btn2){
   modalKind=kind||"";$("m_title").textContent=title;$("m_body").innerHTML=body;
   const b=$("m_btn");b.style.display=btn?"":"none";b.textContent=btn||"";
-  b.onclick=()=>{closeModal();onOk&&onOk()};$("modal").classList.remove("hidden");
+  b.onclick=()=>{if(onOk&&onOk()===false)return;closeModal()};  // onOk boleh return false = tetap terbuka
+  const c=$("m_btn2");c.classList.toggle("hidden",!btn2);c.textContent=btn2||"";c.onclick=closeModal;
+  $("modal").classList.remove("hidden");
 }
 function closeModal(){$("modal").classList.add("hidden");modalKind=""}
 const spinner='<div class="spin mx-auto h-12 w-12 rounded-full border-4 border-slate-200 border-t-[color:var(--primary)]"></div>';
@@ -143,7 +146,7 @@ async function init(){
   if(tpls.length)pick(tpls[0]);
   filters=await (await fetch("/api/filters")).json();showFilter();
   const c=await (await fetch("/api/cameras")).json();
-  $("camsel").innerHTML=c.list.map((n,i)=>`<option value="${i}" ${i===c.current?"selected":""}>🎥 ${n}</option>`).join("");
+  $("camsel").innerHTML=c.list.map(x=>`<option value="${x.index}" ${x.index===c.current?"selected":""}>🎥 ${x.name}</option>`).join("");
   go("p_standby");poll();
 }
 function showFilter(){$("filterbtn").textContent="FILTER: "+(filters.names[filters.current]||"-")}
@@ -167,7 +170,29 @@ async function doQR(){
   if(s.upload==="done")showQR(s.link);else await post("/api/upload");
 }
 function showQR(link){modal("Scan untuk Download",`<img src="/api/qr?${Date.now()}" class="mx-auto w-64 rounded-xl border p-2"><p class="mt-3 text-sm break-all text-slate-500">${link}</p>`,"SELESAI");}
-function doPrint(){post("/api/print")}
+async function doPrint(){
+  const r=await (await fetch("/api/printers")).json();
+  if(!r.list.length){modal("Cetak","Tidak ada printer terdeteksi. Pasang driver printer dan <b>pywin32</b> di laptop.","OK");return}
+  const q=x=>x.replace(/"/g,"&quot;");
+  const opts='<option value="">— Pilih printer —</option>'+r.list.map(p=>`<option value="${q(p)}" ${p===r.selected?"selected":""}>${p}</option>`).join("");
+  modal("Cetak Foto",`<div class="flex justify-center"><img id="pr_prev" class="max-h-80 bg-white border border-slate-300 shadow-md rounded" alt=""></div>
+    <p id="pr_info" class="text-sm text-slate-500 mt-2 mb-3"></p>
+    <select id="pr_sel" onchange="loadPrev()" class="w-full border-2 border-slate-300 rounded-xl p-3 text-lg">${opts}</select>
+    <div class="mt-5 flex items-center justify-center gap-4"><button class="btn alt !px-5 !py-2" onclick="cp(-1)">−</button><span id="pr_n" class="display text-3xl w-10">1</span><button class="btn alt !px-5 !py-2" onclick="cp(1)">+</button><span>salinan</span></div>
+    <p id="pr_err" class="mt-3 text-red-500 min-h-6"></p>`,"CETAK",()=>{
+      const p=$("pr_sel").value;
+      if(!p){$("pr_err").textContent="Pilih printer dulu";return false}
+      post("/api/print",{printer:p,copies:+$("pr_n").textContent});
+    },"prsel","BATAL");
+  loadPrev();
+}
+async function loadPrev(){
+  try{
+    const j=await (await fetch("/api/print_preview?printer="+encodeURIComponent($("pr_sel").value))).json();
+    if(j.image){$("pr_prev").src=j.image;$("pr_info").textContent=j.info+(j.dobel?" · strip dicetak 2 lajur, lalu dipotong":"")}
+  }catch(e){}
+}
+function cp(d){const e=$("pr_n");e.textContent=Math.min(5,Math.max(1,+e.textContent+d))}
 function finish(){post("/api/reset");qrShown=null;go("p_standby")}
 
 /* ── game saat memproses ── */

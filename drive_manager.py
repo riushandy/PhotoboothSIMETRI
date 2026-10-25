@@ -1,6 +1,6 @@
 """Upload hasil photobooth ke Google Drive dan hasilkan link untuk QR.
 
-Setup sekali (lihat README_DRIVE.md):
+Setup sekali (lihat docs/README_DRIVE.md):
     python drive_manager.py --auth
 """
 import json

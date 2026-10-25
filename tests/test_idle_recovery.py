@@ -132,7 +132,7 @@ class IdleRecoveryTests(unittest.TestCase):
         )
         with self.assertLogs(level="ERROR"):
             LiveCamSidebar._poll_frame(sidebar)
-        sidebar.after.assert_called_once_with(35, sidebar._poll_frame)
+        sidebar.after.assert_called_once_with(16, sidebar._poll_frame)
 
     def test_camera_retry_does_not_block_ui_waiting_for_old_worker(self):
         sidebar = SimpleNamespace(

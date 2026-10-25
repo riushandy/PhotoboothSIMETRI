@@ -3,7 +3,7 @@
 Jalankan:  python tablet_server.py            (kamera asli)
            python tablet_server.py --fake     (tanpa kamera, tes koneksi)
 """
-import argparse, io, json, math, os, shutil, socket, subprocess, threading, time
+import argparse, base64, io, json, math, os, shutil, socket, subprocess, threading, time
 import cv2
 import numpy as np
 from flask import Flask, Response, jsonify, request, send_file, send_from_directory, abort
@@ -14,11 +14,11 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES = os.path.join(ROOT, "assets", "templates")
 UI_DIR = os.path.join(ROOT, "tablet_ui")
 OUT_DIR = os.path.join(ROOT, "riwayat")
-COUNTDOWN = 10        # detik per foto
+COUNTDOWN = 5       # detik per foto
 VIDEO_SECONDS = 5     # video = N detik terakhir sebelum jepret
 VIDEO_FPS = 30
 OUTPUT_SCALE = 4         # foto hasil = ukuran template x 4
-VIDEO_MAX_SIZE = (1440, 2160)  # batas ukuran video (lebar, tinggi) agar mulus di tablet
+VIDEO_MAX_SIZE = (1080, 1920)  # batas ukuran video (lebar, tinggi) agar mulus di tablet
 VIDEO_CLIP_WIDTH = 1280  # lebar klip sumber video
 
 app = Flask(__name__)
@@ -36,8 +36,9 @@ def fail(msg):
 
 # ── Kamera: satu pemilik, frame dibagikan ke preview & jepret ───────────
 class Camera:
-    def __init__(self, index, fake):
-        self.index, self.fake, self.frame = index, fake, None
+    def __init__(self, index, fake, backend="auto"):
+        self.index, self.fake, self.backend, self.frame = index, fake, backend, None
+        self.ok = fake  # True jika kamera benar-benar mengirim gambar
         self.lock, self.reopen = threading.Lock(), threading.Event()
         threading.Thread(target=self._loop, daemon=True).start()
 
@@ -45,18 +46,49 @@ class Camera:
         self.index = index
         self.reopen.set()
 
+    def _try(self, backend, force):
+        cap = cv2.VideoCapture(self.index) if backend is None else cv2.VideoCapture(self.index, backend)
+        if not cap.isOpened():
+            cap.release()
+            return None
+        if force:  # webcam biasa: minta MJPG 1080p. Kamera virtual sering menolak -> dicoba lagi tanpa ini
+            cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        for _ in range(15):  # pastikan frame benar-benar berisi gambar (bukan hitam)
+            ok, f = cap.read()
+            if ok and f is not None and f.max() > 25:
+                return cap
+            time.sleep(0.1)
+        cap.release()
+        return None
+
     def _open(self):
         if self.fake:
             return None
-        cap = cv2.VideoCapture(self.index, cv2.CAP_DSHOW if os.name == "nt" else 0)
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-        if not cap.isOpened():
-            print("! Kamera tidak bisa dibuka, pakai frame palsu.")
-            return None
-        print("Kamera:", int(cap.get(3)), "x", int(cap.get(4)))
-        return cap
+        if os.name == "nt":
+            names = {"dshow": [cv2.CAP_DSHOW], "msmf": [cv2.CAP_MSMF], "auto": [cv2.CAP_DSHOW, cv2.CAP_MSMF]}
+            backends = names[self.backend]
+        else:
+            backends = [None]
+        for be in backends:
+            for force in (True, False):
+                cap = self._try(be, force)
+                if cap is not None:
+                    print(f"Kamera {self.index}: {int(cap.get(3))} x {int(cap.get(4))} "
+                          f"(backend={be}, paksa_format={force})")
+                    self.ok = True
+                    return cap
+        self.ok = False
+        print(f"! Kamera {self.index} tidak mengirim gambar. Tutup aplikasi lain yang memakai kamera, "
+              "cek mode/koneksi kamera, atau coba --backend msmf / --camera nomor lain.")
+        return None
+
+    def _placeholder(self):
+        f = np.full((720, 1280, 3), 40, np.uint8)
+        cv2.putText(f, "Kamera tidak terbaca", (260, 340), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 4)
+        cv2.putText(f, f"Kamera {self.index} - cek koneksi", (320, 420), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (200, 200, 200), 2)
+        return f
 
     def _loop(self):
         cap, t = self._open(), 0
@@ -71,12 +103,19 @@ class Camera:
                 if not ok:
                     time.sleep(0.05)
                     continue
-            else:
+            elif self.fake:
                 t += 1
                 f = np.zeros((720, 1280, 3), np.uint8)
                 f[:] = (40 + t % 120, 90, 160)
                 cv2.putText(f, time.strftime("%H:%M:%S"), (380, 400), cv2.FONT_HERSHEY_SIMPLEX, 4, (255, 255, 255), 8)
                 time.sleep(1 / 20)
+            else:  # kamera belum terbaca: tampilkan pesan, coba buka lagi tiap beberapa detik
+                f = self._placeholder()
+                time.sleep(3)
+                with self.lock:
+                    self.frame = f
+                cap = self._open()
+                continue
             with self.lock:
                 self.frame = f
 
@@ -86,16 +125,19 @@ class Camera:
         return apply_filter(f, state["filter"]) if (f is not None and filtered) else f
 
 
-def probe_cameras(fake):
+def probe_cameras(fake, current=0):
+    """Daftar nomor kamera yang ada (nomor asli, bukan urutan)."""
     if fake:
-        return ["Kamera palsu"]
+        return [0]
     found = []
-    for i in range(4):
-        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW if os.name == "nt" else 0)
+    for i in range(6):
+        cap = cv2.VideoCapture(i, cv2.CAP_DSHOW) if os.name == "nt" else cv2.VideoCapture(i)
         if cap.isOpened():
-            found.append(f"Kamera {i}")
+            found.append(i)
         cap.release()
-    return found or ["Kamera 0"]
+    if current not in found:
+        found.append(current)
+    return sorted(found)
 
 
 # ── Template, komposit, video ───────────────────────────────────────────
@@ -280,13 +322,16 @@ def do_upload():
         fail(f"Upload gagal: {e}")
 
 
-def do_print():
+PRINT_SEL = {"printer": ""}  # pilihan terakhir operator (hanya untuk dipilih-awal di pop up)
+
+
+def do_print(printer, copies):
     try:
         from print_manager import PrintManager
-        ok = PrintManager.print_image(os.path.join(S["dir"], "foto_frame.jpg"))
-        state.update(print="done" if ok else "error")
+        ok = PrintManager.print_image(os.path.join(S["dir"], "foto_frame.jpg"), printer_name=printer, copies=copies)
+        state.update(**{"print": "done" if ok else "error"})
     except Exception:
-        state.update(print="error")
+        state.update(**{"print": "error"})
 
 
 # ── Route ───────────────────────────────────────────────────────────────
@@ -326,13 +371,13 @@ def api_filter():
 
 @app.get("/api/cameras")
 def api_cameras():
-    return jsonify(list=CAMERAS, current=cam.index)
+    return jsonify(list=[{"index": i, "name": f"Kamera {i}"} for i in CAMERAS], current=cam.index, ok=cam.ok)
 
 
 @app.post("/api/camera")
 def api_camera():
-    i = int((request.get_json(silent=True) or {}).get("index", 0))
-    if state["phase"] == "idle" and 0 <= i < len(CAMERAS):
+    i = int((request.get_json(silent=True) or {}).get("index", -1))
+    if state["phase"] == "idle" and i in CAMERAS:
         cam.switch(i)
     return api_cameras()
 
@@ -380,12 +425,71 @@ def api_upload():
     return jsonify(ok=True)
 
 
+@app.get("/api/printers")
+def api_printers():
+    try:
+        from print_manager import PrintManager
+        names = PrintManager.list_printers()
+    except Exception:
+        names = []
+    return jsonify(list=names, selected=PRINT_SEL["printer"])
+
+
+@app.get("/api/print_preview")
+def api_print_preview():
+    """Pratinjau hasil cetak sesuai printer terpilih (ukuran halaman, area cetak, strip dobel)."""
+    if state["phase"] != "result" or not S["dir"]:
+        return jsonify(error="belum ada hasil"), 409
+    from print_manager import PrintManager, WIN32_OK, load_config, prepare_image, area_box
+    printer = request.args.get("printer", "")
+    paper, dpi, info = (1200, 1800), (300, 300), "Perkiraan kertas 4R. Pilih printer untuk ukuran sebenarnya."
+    if printer and WIN32_OK:
+        try:
+            pi = PrintManager.paper_info(printer)
+            if pi:
+                paper, dpi, info = pi["px"], pi["dpi"], f'Halaman {pi["mm"][0]} × {pi["mm"][1]} mm'
+        except Exception:
+            info = "Ukuran kertas printer tidak terbaca, memakai perkiraan 4R."
+    cfg = load_config()
+    ax0, ay0, ax1, ay1 = area_box(paper[0], paper[1], dpi[0], dpi[1], cfg)
+    src = Image.open(os.path.join(S["dir"], ".preview.jpg"))
+    img, box = prepare_image(src, ax1 - ax0, ay1 - ay0, cfg)
+    box = (box[0] + ax0, box[1] + ay0, box[2] + ax0, box[3] + ay0)
+    area_on = bool((cfg.get("area") or {}).get("enabled"))
+    if area_on:  # tampilkan hanya kertas potongan (area cetak), diperbesar; posisi di halaman ditulis di teks
+        aw, ah = ax1 - ax0, ay1 - ay0
+        sc = min(600 / aw, 800 / ah)
+        canvas = Image.new("RGB", (max(1, round(aw * sc)), max(1, round(ah * sc))), "white")
+        bx = [round(v * sc) for v in (box[0] - ax0, box[1] - ay0, box[2] - ax0, box[3] - ay0)]
+        canvas.paste(img.resize((max(1, bx[2] - bx[0]), max(1, bx[3] - bx[1])), Image.LANCZOS), (bx[0], bx[1]))
+        a = cfg["area"]
+        nama = {"left": "kiri", "right": "kanan", "center": "tengah", "top": "atas", "bottom": "bawah"}
+        pos = f'{nama.get(a.get("align_y", "top"), "?")}-{nama.get(a.get("align_x", "center"), "?")}'
+        geser = f' (geser {a.get("offset_x_mm", 0)}, {a.get("offset_y_mm", 0)} mm)' if a.get("offset_x_mm") or a.get("offset_y_mm") else ""
+        info += f" · area {a.get('width_mm', 102)}×{a.get('height_mm', 152)} mm, posisi di halaman: {pos}{geser}"
+    else:
+        sc = min(600 / paper[0], 800 / paper[1])
+        canvas = Image.new("RGB", (max(1, round(paper[0] * sc)), max(1, round(paper[1] * sc))), "white")
+        x0, y0, x1, y1 = [round(v * sc) for v in box]
+        canvas.paste(img.resize((max(1, x1 - x0), max(1, y1 - y0)), Image.LANCZOS), (x0, y0))
+    buf = io.BytesIO()
+    canvas.save(buf, "JPEG", quality=85)
+    dobel = bool(cfg.get("duplicate_strip")) and src.width / src.height <= 0.4
+    return jsonify(image="data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(), info=info, dobel=dobel)
+
+
 @app.post("/api/print")
 def api_print():
+    """Cetak manual: printer WAJIB dipilih operator (tidak ada printer otomatis)."""
+    body = request.get_json(silent=True) or {}
+    printer, copies = body.get("printer", ""), max(1, min(5, int(body.get("copies", 1))))
     if state["phase"] != "result" or state["print"] == "printing":
         return jsonify(error="tidak bisa"), 409
+    if printer not in api_printers().json["list"]:
+        return jsonify(error="printer belum dipilih"), 400
+    PRINT_SEL["printer"] = printer
     state.update(**{"print": "printing"})
-    threading.Thread(target=do_print, daemon=True).start()
+    threading.Thread(target=do_print, args=(printer, copies), daemon=True).start()
     return jsonify(ok=True)
 
 
@@ -447,8 +551,9 @@ if __name__ == "__main__":
     ap.add_argument("--camera", type=int, default=0)
     ap.add_argument("--port", type=int, default=5000)
     ap.add_argument("--fake", action="store_true", help="tanpa kamera asli")
+    ap.add_argument("--backend", choices=["auto", "dshow", "msmf"], default="auto", help="cara membuka kamera (Windows)")
     a = ap.parse_args()
-    CAMERAS = probe_cameras(a.fake)
-    cam = Camera(a.camera, a.fake)
+    CAMERAS = probe_cameras(a.fake, a.camera)
+    cam = Camera(a.camera, a.fake, a.backend)
     print(f"\nBuka di tablet:  http://{lan_ip()}:{a.port}\n")
     app.run(host="0.0.0.0", port=a.port, threaded=True)
